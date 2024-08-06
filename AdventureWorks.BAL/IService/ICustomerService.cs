@@ -1,4 +1,5 @@
 ﻿using AdventureWorks.BAL.ResponseModel;
+using AdventureWorks.DAL.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,6 +10,7 @@ namespace AdventureWorks.BAL.IService
 {
     public interface ICustomerService
     {
-        IQueryable<CustomerResponse> Get();
+        IQueryable<CustomerResponse> Get(bool includeAddresses, bool includeSalesOrderHeaders);
+        dynamic GetDapper(string filter, string orderBy, bool includeAddresses, bool includeSalesOrderHeaders);
     }
 }

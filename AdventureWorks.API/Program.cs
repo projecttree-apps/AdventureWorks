@@ -1,10 +1,16 @@
 using AdventureWorks.BAL.IService;
+using AdventureWorks.BAL.Mapper;
 using AdventureWorks.BAL.Service;
 using AdventureWorks.DAL.Data;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.OData;
 using Microsoft.AspNetCore.OData.Query;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.OData.ModelBuilder;
+using System.Data;
+using System.Data.Common;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,11 +29,13 @@ builder.Services.AddSwaggerGen();
 
 #region Interface Specification
 builder.Services.AddScoped<ICustomerService, CustomerService>();
+builder.Services.AddTransient<IDbConnection>(provider => new SqlConnection(builder.Configuration.GetConnectionString("DefaultConnection")));
 #endregion
 
+builder.Services.AddAutoMapper(typeof(MappingProfile));
 
 builder.Services.AddControllers().AddOData(
-options => options.Select().Filter().OrderBy().Expand().Count().SetMaxTop(null)
+options => options.Select().Filter().OrderBy().Expand().SetMaxTop(null)
 );
 
 var app = builder.Build();
