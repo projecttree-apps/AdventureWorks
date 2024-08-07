@@ -14,19 +14,35 @@ namespace BenchmarkApp
         public int IterationCount;
         private readonly ApiList _apiList = new ApiList();
         [Benchmark]
-        public async Task GetCustomerList()
+        public async Task scenario1stEntity()
         {
             for (int i = 0; i < IterationCount; i++)
             {
-                await _apiList.GetCustomerList();
+                await _apiList.scenario1stEntity();
             }
         }
         [Benchmark]
-        public async Task GetCustomerListByCustom()
+        public async Task scenario1stDapper()
         {
             for (int i = 0; i < IterationCount; i++)
             {
-                await _apiList.GetCustomerListByCustom();
+                await _apiList.scenario1stDapper();
+            }
+        }
+        [Benchmark]
+        public async Task scenario2ndEntity()
+        {
+            for (int i = 0; i < IterationCount; i++)
+            {
+                await _apiList.scenario2ndEntity();
+            }
+        }
+        [Benchmark]
+        public async Task scenario2ndDapper()
+        {
+            for (int i = 0; i < IterationCount; i++)
+            {
+                await _apiList.scenario2ndDapper();
             }
         }
     }

@@ -134,7 +134,9 @@ namespace AdventureWorks.BAL.Service
 SELECT [c].[CustomerID], [c].[NameStyle], [c].[Title], [c].[FirstName], [c].[MiddleName], [c].[LastName], [c].[Suffix], [c].[CompanyName], [c].[SalesPerson], [c].[EmailAddress], [c].[Phone], [c].[PasswordHash], [c].[PasswordSalt], [c].[rowguid], [c].[ModifiedDate]
 FROM [SalesLT].[Customer] AS [c] WITH(NOLOCK)
 ";
-                var whereClause = string.IsNullOrEmpty(filter) == true ? string.Empty : $" WHERE {ODataFilterToSql(filter)}";
+
+                var whereClause = ODataFilterToSql(filter);
+                whereClause = string.IsNullOrEmpty(whereClause) == true ? string.Empty : $" WHERE {whereClause}";
                 var orderByClause = string.IsNullOrEmpty(orderBy) == true ? string.Empty : $" ORDER BY {orderBy}";
 
                 customerQuery = $"{customerQuery} {whereClause} {orderByClause}";
@@ -219,6 +221,8 @@ WHERE [c0].[CustomerID] IN @CustomerIDs ";
                 return string.Empty;
             }
 
+            filter = filterClean(filter);
+
             var sqlFilter = filter
                 .Replace(" eq ", " = ")
                 .Replace(" ne ", " != ")
@@ -232,6 +236,55 @@ WHERE [c0].[CustomerID] IN @CustomerIDs ";
                 sqlFilter = sqlFilter.ToLower().Replace(item.Key.ToLower(), item.Value);
             }
             return sqlFilter;
+        }
+        string filterClean(string filter)
+        {
+
+            var _filter = filter.Replace(" AND ", ";");
+            _filter = _filter.Replace(" OR ", ",");
+            _filter = _filter.Replace(" and ", ";");
+            _filter = _filter.Replace(" or ", ",");
+
+            var _a = SplitConditions(_filter, new char[] { ';', ',' });
+            List<string> removeList = new();
+            foreach (var item in _a)
+            {
+                if (item.IndexOf("/", StringComparison.InvariantCulture) < item.IndexOf(" ", StringComparison.InvariantCulture))
+                {
+                    removeList.Add(item);
+                }
+            }
+            foreach (var item in removeList)
+            {
+                filter = filter.Replace(item, string.Empty);
+            }
+            filter = filter.Trim();
+            filter = filter.TrimEnd(new char[] { 'a', 'n', 'd', 'o', 'r' });
+            return filter;
+        }
+        IEnumerable<string> SplitConditions(string query, char[] separators)
+        {
+            int depth = 0;
+            List<int> splitIndexes = new List<int>();
+
+            for (int i = 0; i < query.Length; i++)
+            {
+                if (query[i] == '(') depth++;
+                if (query[i] == ')') depth--;
+                if (depth == 0 && Array.Exists(separators, separator => separator == query[i]))
+                {
+                    splitIndexes.Add(i);
+                }
+            }
+
+            splitIndexes.Add(query.Length);
+
+            int start = 0;
+            foreach (int index in splitIndexes)
+            {
+                yield return query.Substring(start, index - start).Trim();
+                start = index + 1;
+            }
         }
 
     }

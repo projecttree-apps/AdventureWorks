@@ -1,0 +1,1 @@
+ dotnet run -p BenchmarkApp.csproj -c Release
