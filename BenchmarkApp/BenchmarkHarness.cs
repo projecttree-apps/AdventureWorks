@@ -10,7 +10,7 @@ namespace BenchmarkApp
     [HtmlExporter]
     public class BenchmarkHarness
     {
-        [Params(100, 200)]
+        [Params(100)]
         public int IterationCount;
         private readonly ApiList _apiList = new ApiList();
         [Benchmark]
@@ -22,11 +22,11 @@ namespace BenchmarkApp
             }
         }
         [Benchmark]
-        public async Task GetCustomerListByDapper()
+        public async Task GetCustomerListByCustom()
         {
             for (int i = 0; i < IterationCount; i++)
             {
-                await _apiList.GetCustomerListByDapper();
+                await _apiList.GetCustomerListByCustom();
             }
         }
     }

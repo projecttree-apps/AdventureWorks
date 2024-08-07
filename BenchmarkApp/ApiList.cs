@@ -12,18 +12,19 @@ namespace BenchmarkApp
         public async Task GetCustomerList()
         {
             var client = new HttpClient();
-            var request = new HttpRequestMessage(HttpMethod.Get, "https://localhost:44324/Customer?includeSalesOrderHeaders=true&includeAddresses=true&$filter=customerid eq 29877");
+            var request = new HttpRequestMessage(HttpMethod.Get, "https://localhost:44324/Customer?$filter=SalesPerson eq 'adventure-works\\shu0'");
             var response = await client.SendAsync(request);
             response.EnsureSuccessStatusCode();
             //Console.WriteLine(await response.Content.ReadAsStringAsync());
         }
-        public async Task GetCustomerListByDapper()
+        public async Task GetCustomerListByCustom()
         {
             var client = new HttpClient();
-            var request = new HttpRequestMessage(HttpMethod.Get, "https://localhost:44324/Customer/GetDapper?includeSalesOrderHeaders=true&includeAddresses=true&$filter=customerid eq 29877");
+            var request = new HttpRequestMessage(HttpMethod.Get, "https://localhost:44324/Customer/GetCustom?$filter=SalesPerson eq 'adventure-works\\shu0'");
             var response = await client.SendAsync(request);
             response.EnsureSuccessStatusCode();
             //Console.WriteLine(await response.Content.ReadAsStringAsync());
+
         }
     }
 }

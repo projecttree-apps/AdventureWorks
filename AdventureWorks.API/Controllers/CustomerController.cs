@@ -25,11 +25,11 @@ namespace AdventureWorks.API.Controllers
             return Ok(response);
         }
 
-        [HttpGet("GetDapper")]
+        [HttpGet("GetCustom")]
         [EnableQuery(MaxExpansionDepth = 4, MaxAnyAllExpressionDepth = 4)]
-        public ActionResult<dynamic> GetDapper(ODataQueryOptions<dynamic> queryOptions, bool includeAddresses = false, bool includeSalesOrderHeaders = false)
+        public async Task<ActionResult<List<CustomerResponseCustom>>> GetCustomeQuery(ODataQueryOptions<CustomerResponseCustom> queryOptions, bool includeAddresses = false, bool includeSalesOrderHeaders = false)
         {
-            var response = customerService.GetDapper(queryOptions.Filter?.RawValue, queryOptions.OrderBy?.RawValue, includeAddresses, includeSalesOrderHeaders);
+            var response = await customerService.GetCustomeQuery(queryOptions.Filter?.RawValue, queryOptions.OrderBy?.RawValue, includeAddresses, includeSalesOrderHeaders);
             return Ok(response);
         }
     }

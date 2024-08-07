@@ -4,11 +4,14 @@ using AdventureWorks.DAL.Data;
 using AdventureWorks.DAL.Models;
 using AutoMapper;
 using Dapper;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -121,113 +124,93 @@ namespace AdventureWorks.BAL.Service
             return result;
         }
 
-        public dynamic GetDapper(string filter, string orderBy, bool includeAddresses, bool includeSalesOrderHeaders)
+        public async Task<List<CustomerResponseCustom>> GetCustomeQuery(string filter, string orderBy, bool includeAddresses, bool includeSalesOrderHeaders)
         {
-            var sqlQuery = BuildSqlQuery(filter, orderBy, includeAddresses, includeSalesOrderHeaders);
+            try
+            {
+                using SqlConnection conn = new SqlConnection(_dbConnection.ConnectionString);
 
-            var customerDictionary = new Dictionary<int, CustomerResponseCustom>();
+                var customerQuery = $@"
+SELECT [c].[CustomerID], [c].[NameStyle], [c].[Title], [c].[FirstName], [c].[MiddleName], [c].[LastName], [c].[Suffix], [c].[CompanyName], [c].[SalesPerson], [c].[EmailAddress], [c].[Phone], [c].[PasswordHash], [c].[PasswordSalt], [c].[rowguid], [c].[ModifiedDate]
+FROM [SalesLT].[Customer] AS [c] WITH(NOLOCK)
+";
+                var whereClause = string.IsNullOrEmpty(filter) == true ? string.Empty : $" WHERE {ODataFilterToSql(filter)}";
+                var orderByClause = string.IsNullOrEmpty(orderBy) == true ? string.Empty : $" ORDER BY {orderBy}";
 
-            var result = _dbConnection.Query<CustomerResponseCustom, CustomerAddressResponse, SalesOrderHeaderResponseCustom, SalesOrderDetailResponse, ProductResponse, CustomerResponseCustom>(
-                sqlQuery,
-                (customer, address, order, detail, product) =>
+                customerQuery = $"{customerQuery} {whereClause} {orderByClause}";
+
+                var customer = (await conn.QueryAsync<CustomerResponseCustom>(customerQuery)).ToList();
+
+                var address = new List<CustomerAddressResponse>();
+                if (includeAddresses)
                 {
-                    CustomerResponseCustom customerEntry;
+                    var customerAddressQuery = @"
+SELECT [c0].[CustomerID] AS [CustomerId], [c0].[AddressID] AS [AddressId], [a].[AddressLine1], [a].[AddressLine2], [a].[City], [a].[StateProvince], [a].[CountryRegion], [a].[PostalCode], [a].[rowguid] AS [Rowguid], [a].[ModifiedDate], [a].[AddressID] AS [AddressID0]
+FROM [SalesLT].[CustomerAddress] AS [c0]
+INNER JOIN [SalesLT].[Address] AS [a] ON [c0].[AddressID] = [a].[AddressID]
+WHERE [c0].[CustomerID] IN @CustomerIDs ";
+                    List<int> CustomerIDs = customer.Select(x => x.CustomerId).ToList();
+                    address = (await conn.QueryAsync<CustomerAddressResponse>(customerAddressQuery, new { CustomerIDs })).ToList();
+                }
+                var salesOrderHeader = new List<SalesOrderHeaderResponseCustom>();
+                if (includeSalesOrderHeaders)
+                {
+                    var salesOrderHeaderQuery = @"SELECT * FROM [SalesLT].[SalesOrderHeader] AS [s] WHERE [s].[CustomerID] IN @CustomerID";
+                    List<int> CustomerId = customer.Select(x => x.CustomerId).ToList();
+                    salesOrderHeader = (await conn.QueryAsync<SalesOrderHeaderResponseCustom>(salesOrderHeaderQuery, new { CustomerId })).ToList();
 
-                    if (!customerDictionary.TryGetValue(customer.CustomerId, out customerEntry))
-                    {
-                        customerEntry = customer;
-                        customerEntry.CustomerAddresses = new List<CustomerAddressResponse>();
-                        customerEntry.SalesOrderHeaders = new List<SalesOrderHeaderResponseCustom>();
-                        customerDictionary.Add(customerEntry.CustomerId, customerEntry);
-                    }
+                    var salesOrderDetailQuery = @"SELECT * FROM [SalesLT].[SalesOrderDetail] AS [a] WHERE [a].[SalesOrderID] IN @SalesOrderID";
+                    List<int> SalesOrderID = salesOrderHeader.Select(x => x.SalesOrderId).ToList();
+                    var SalesOrderDetail = (await conn.QueryAsync<SalesOrderDetailResponse>(salesOrderDetailQuery, new { SalesOrderID })).ToList();
 
-                    if (address != null && !customerEntry.CustomerAddresses.Any(a => a.AddressId == address.AddressId))
-                    {
-                        customerEntry.CustomerAddresses.Add(address);
-                    }
+                    var ProductQuery = @"SELECT [p].*,[p0].Name [ProductCategory],[p1].Name [ProductModel]
+        FROM [SalesLT].[Product] AS [p]
+        LEFT JOIN [SalesLT].[ProductCategory] AS [p0] ON [p].[ProductCategoryID] = [p0].[ProductCategoryID]
+        LEFT JOIN [SalesLT].[ProductModel] AS [p1] ON [p].[ProductModelID] = [p1].[ProductModelID] WHERE [p].[ProductID] IN @ProductID";
+                    List<int> ProductID = SalesOrderDetail.Select(x => x.ProductId).ToList();
+                    var Product = await conn.QueryAsync<ProductResponse>(ProductQuery, new { ProductID });
 
-                    if (order != null)
-                    {
-                        var existingOrder = customerEntry.SalesOrderHeaders.FirstOrDefault(o => o.SalesOrderId == order.SalesOrderId);
-                        if (existingOrder == null)
-                        {
-                            order.SalesOrderDetails = new List<SalesOrderDetailResponse>();
-                            customerEntry.SalesOrderHeaders.Add(order);
-                            existingOrder = order;
-                        }
+                    SalesOrderDetail.ForEach(x => x.Product = Product.Where(y => y.ProductId == x.ProductId).FirstOrDefault() ?? new ProductResponse());
+                    salesOrderHeader.ForEach(x => x.SalesOrderDetails = SalesOrderDetail.Where(y => y.SalesOrderId == x.SalesOrderId).ToList());
+                }
+                customer.ForEach(x =>
+                {
+                    x.CustomerAddresses = address.Where(y => y.CustomerId == x.CustomerId).ToList();
+                    x.SalesOrderHeaders = salesOrderHeader.Where(y => y.CustomerId == x.CustomerId).ToList();
+                });
 
-                        if (detail != null)
-                        {
-                            var existingDetail = existingOrder.SalesOrderDetails.FirstOrDefault(d => d.SalesOrderDetailId == detail.SalesOrderDetailId);
-                            if (existingDetail == null)
-                            {
-                                detail.Product = product;
-                                existingOrder.SalesOrderDetails.Add(detail);
-                            }
-                        }
-                    }
 
-                    return customerEntry;
-                },
-                splitOn: "CustomerId, AddressId, SalesOrderID, SalesOrderDetailId, ProductId"
-            ).Distinct().ToList();
+                return customer;
+            }
+            catch (Exception ex)
+            {
 
-            return result;
+                throw;
+            }
         }
+
         private Dictionary<string, string> getCustomerFilterMap()
         {
-            var filterMap = new Dictionary<string, string>();
-            filterMap.Add("customerid ", "[c].customerid ");
-            filterMap.Add("customeraddresses/stateprovince ", "[t].[stateprovince] ");
+            var filterMap = new Dictionary<string, string>
+                        {
+                            { "CustomerID", "[c].[CustomerID]" },
+                            { "NameStyle", "[c].[NameStyle]" },
+                            { "Title", "[c].[Title]" },
+                            { "FirstName", "[c].[FirstName]" },
+                            { "MiddleName", "[c].[MiddleName]" },
+                            { "LastName", "[c].[LastName]" },
+                            { "Suffix", "[c].[Suffix]" },
+                            { "CompanyName", "[c].[CompanyName]" },
+                            { "SalesPerson", "[c].[SalesPerson]" },
+                            { "EmailAddress", "[c].[EmailAddress]" },
+                            { "Phone", "[c].[Phone]" },
+                            { "PasswordHash", "[c].[PasswordHash]" },
+                            { "PasswordSalt", "[c].[PasswordSalt]" },
+                            { "rowguid", "[c].[rowguid]" },
+                            { "ModifiedDate", "[c].[ModifiedDate]" }
+                        };
+
             return filterMap;
-
-        }
-        private string BuildSqlQuery(string filter, string orderBy, bool includeAddresses, bool includeSalesOrderHeaders)
-        {
-            var addressSeelct = "";
-            var addressFrom = "";
-            if (includeAddresses)
-            {
-                addressSeelct = ",[t].[CustomerId], [t].[AddressId], [t].[AddressLine1], [t].[AddressLine2], [t].[City], [t].[StateProvince], [t].[CountryRegion], [t].[PostalCode], [t].[Rowguid], [t].[ModifiedDate], [t].[AddressID0]";
-
-                addressFrom = @"LEFT JOIN (
-    SELECT [c0].[CustomerID] AS [CustomerId], [c0].[AddressID] AS [AddressId], [a].[AddressLine1], [a].[AddressLine2], [a].[City], [a].[StateProvince], [a].[CountryRegion], [a].[PostalCode], [a].[rowguid] AS [Rowguid], [a].[ModifiedDate], [a].[AddressID] AS [AddressID0]
-    FROM [SalesLT].[CustomerAddress] AS [c0]
-    INNER JOIN [SalesLT].[Address] AS [a] ON [c0].[AddressID] = [a].[AddressID]
-) AS [t] ON [c].[CustomerID] = [t].[CustomerId]";
-            }
-            var orderSeelct = "";
-            var orderFrom = "";
-            if (includeSalesOrderHeaders)
-            {
-                orderSeelct = ",[t0].[SalesOrderID], [t0].[RevisionNumber], [t0].[OrderDate], [t0].[DueDate], [t0].[ShipDate], [t0].[Status], [t0].[OnlineOrderFlag], [t0].[SalesOrderNumber], [t0].[PurchaseOrderNumber], [t0].[AccountNumber], [t0].[CustomerID], [t0].[ShipToAddressID], [t0].[BillToAddressID], [t0].[ShipMethod], [t0].[CreditCardApprovalCode], [t0].[SubTotal], [t0].[TaxAmt], [t0].[Freight], [t0].[TotalDue], [t0].[Comment], [t0].[rowguid], [t0].[ModifiedDate], [t0].[SalesOrderId0], [t0].[SalesOrderDetailId], [t0].[OrderQty], [t0].[ProductId], [t0].[UnitPrice], [t0].[UnitPriceDiscount], [t0].[LineTotal], [t0].[Rowguid0], [t0].[ModifiedDate0], [t0].[ProductId0], [t0].[Name], [t0].[ProductNumber], [t0].[Color], [t0].[StandardCost], [t0].[ListPrice], [t0].[Size], [t0].[Weight], [t0].[ProductCategory], [t0].[ProductModel], [t0].[SellStartDate], [t0].[SellEndDate], [t0].[DiscontinuedDate], [t0].[Rowguid00], [t0].[ModifiedDate00], [t0].[ProductCategoryID], [t0].[ProductModelID]";
-
-                orderFrom = @"LEFT JOIN (
-    SELECT [s].[SalesOrderID], [s].[RevisionNumber], [s].[OrderDate], [s].[DueDate], [s].[ShipDate], [s].[Status], [s].[OnlineOrderFlag], [s].[SalesOrderNumber], [s].[PurchaseOrderNumber], [s].[AccountNumber], [s].[CustomerID], [s].[ShipToAddressID], [s].[BillToAddressID], [s].[ShipMethod], [s].[CreditCardApprovalCode], [s].[SubTotal], [s].[TaxAmt], [s].[Freight], [s].[TotalDue], [s].[Comment], [s].[rowguid], [s].[ModifiedDate], [t1].[SalesOrderId] AS [SalesOrderId0], [t1].[SalesOrderDetailId], [t1].[OrderQty], [t1].[ProductId], [t1].[UnitPrice], [t1].[UnitPriceDiscount], [t1].[LineTotal], [t1].[Rowguid] AS [Rowguid0], [t1].[ModifiedDate] AS [ModifiedDate0], [t1].[ProductId0], [t1].[Name], [t1].[ProductNumber], [t1].[Color], [t1].[StandardCost], [t1].[ListPrice], [t1].[Size], [t1].[Weight], [t1].[ProductCategory], [t1].[ProductModel], [t1].[SellStartDate], [t1].[SellEndDate], [t1].[DiscontinuedDate], [t1].[Rowguid0] AS [Rowguid00], [t1].[ModifiedDate0] AS [ModifiedDate00], [t1].[ProductCategoryID], [t1].[ProductModelID]
-    FROM [SalesLT].[SalesOrderHeader] AS [s]
-    LEFT JOIN (
-        SELECT [s0].[SalesOrderID] AS [SalesOrderId], [s0].[SalesOrderDetailID] AS [SalesOrderDetailId], [s0].[OrderQty], [s0].[ProductID] AS [ProductId], [s0].[UnitPrice], [s0].[UnitPriceDiscount], [s0].[LineTotal], [s0].[rowguid] AS [Rowguid], [s0].[ModifiedDate], [p].[ProductID] AS [ProductId0], [p].[Name], [p].[ProductNumber], [p].[Color], [p].[StandardCost], [p].[ListPrice], [p].[Size], [p].[Weight], [p0].[Name] AS [ProductCategory], [p1].[Name] AS [ProductModel], [p].[SellStartDate], [p].[SellEndDate], [p].[DiscontinuedDate], [p].[rowguid] AS [Rowguid0], [p].[ModifiedDate] AS [ModifiedDate0], [p0].[ProductCategoryID], [p1].[ProductModelID]
-        FROM [SalesLT].[SalesOrderDetail] AS [s0]
-        INNER JOIN [SalesLT].[Product] AS [p] ON [s0].[ProductID] = [p].[ProductID]
-        LEFT JOIN [SalesLT].[ProductCategory] AS [p0] ON [p].[ProductCategoryID] = [p0].[ProductCategoryID]
-        LEFT JOIN [SalesLT].[ProductModel] AS [p1] ON [p].[ProductModelID] = [p1].[ProductModelID]
-    ) AS [t1] ON [s].[SalesOrderID] = [t1].[SalesOrderId]
-) AS [t0] ON [c].[CustomerID] = [t0].[CustomerID]";
-            }
-
-            var query1 = $@"
-SELECT [c].[CustomerID], [c].[NameStyle], [c].[Title], [c].[FirstName], [c].[MiddleName], [c].[LastName], [c].[Suffix], [c].[CompanyName], [c].[SalesPerson], [c].[EmailAddress], [c].[Phone], [c].[PasswordHash], [c].[PasswordSalt], [c].[rowguid], [c].[ModifiedDate]
-{addressSeelct}
-{orderSeelct}
-FROM [SalesLT].[Customer] AS [c]
-{addressFrom}
-{orderFrom}
-";
-
-            var whereClause = string.IsNullOrEmpty(filter) == true ? string.Empty : $" WHERE {ODataFilterToSql(filter)}";
-            var orderByClause = string.IsNullOrEmpty(orderBy) == true ? string.Empty : $" ORDER BY {orderBy}";
-
-            return $"{query1} {whereClause} {orderByClause}";
         }
         private string ODataFilterToSql(string filter)
         {
@@ -242,12 +225,11 @@ FROM [SalesLT].[Customer] AS [c]
                 .Replace(" gt ", " > ")
                 .Replace(" ge ", " >= ")
                 .Replace(" lt ", " < ")
-                .Replace(" le ", " <= ")
-                .Replace("'", "''"); // Handling single quotes for SQL
+                .Replace(" le ", " <= ");
 
             foreach (var item in getCustomerFilterMap())
             {
-                sqlFilter = sqlFilter.ToLower().Replace(item.Key, item.Value);
+                sqlFilter = sqlFilter.ToLower().Replace(item.Key.ToLower(), item.Value);
             }
             return sqlFilter;
         }
