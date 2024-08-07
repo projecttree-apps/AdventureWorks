@@ -21,7 +21,7 @@ namespace AdventureWorks.BAL.ResponseModel
         public DateTime SellStartDate { get; set; }
         public DateTime? SellEndDate { get; set; }
         public DateTime? DiscontinuedDate { get; set; }
-        public byte[]? ThumbNailPhoto { get; set; }
+        //public byte[]? ThumbNailPhoto { get; set; }
         public string? ThumbnailPhotoFileName { get; set; }
         public Guid Rowguid { get; set; }
         public DateTime ModifiedDate { get; set; }

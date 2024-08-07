@@ -9,39 +9,13 @@ namespace BenchmarkApp
 {
     public class ApiList
     {
-        public async Task scenario1stEntity()
+        public async Task GetExecute(string url)
         {
             var client = new HttpClient();
-            var request = new HttpRequestMessage(HttpMethod.Get, "https://localhost:44324/Customer?$filter=SalesPerson eq 'adventure-works\\shu0'");
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
             var response = await client.SendAsync(request);
             response.EnsureSuccessStatusCode();
             //Console.WriteLine(await response.Content.ReadAsStringAsync());
-        }
-        public async Task scenario1stDapper()
-        {
-            var client = new HttpClient();
-            var request = new HttpRequestMessage(HttpMethod.Get, "https://localhost:44324/Customer/GetCustom?$filter=SalesPerson eq 'adventure-works\\shu0'");
-            var response = await client.SendAsync(request);
-            response.EnsureSuccessStatusCode();
-            //Console.WriteLine(await response.Content.ReadAsStringAsync());
-
-        }
-        public async Task scenario2ndEntity()
-        {
-            var client = new HttpClient();
-            var request = new HttpRequestMessage(HttpMethod.Get, "https://localhost:44324/Customer?includeAddresses=true&$filter=CustomerAddresses/any(address: address/CountryRegion eq 'United States') and CustomerAddresses/any(address: address/StateProvince eq 'Texas')");
-            var response = await client.SendAsync(request);
-            response.EnsureSuccessStatusCode();
-            //Console.WriteLine(await response.Content.ReadAsStringAsync());
-        }
-        public async Task scenario2ndDapper()
-        {
-            var client = new HttpClient();
-            var request = new HttpRequestMessage(HttpMethod.Get, "https://localhost:44324/Customer/GetCustom?includeAddresses=true&$filter=CustomerAddresses/any(address: address/CountryRegion eq 'United States') and CustomerAddresses/any(address: address/StateProvince eq 'Texas')");
-            var response = await client.SendAsync(request);
-            response.EnsureSuccessStatusCode();
-            //Console.WriteLine(await response.Content.ReadAsStringAsync());
-
         }
     }
 }
