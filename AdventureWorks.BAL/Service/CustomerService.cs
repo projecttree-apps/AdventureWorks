@@ -148,7 +148,7 @@ namespace AdventureWorks.BAL.Service
           PasswordSalt = data.PasswordSalt,
           Rowguid = data.Rowguid,
           ModifiedDate = data.ModifiedDate,
-          CustomerAddresses = includeAddresses ? data.CustomerAddresses.Select(ca => new CustomerAddressResponse
+          CustomerAddresses = data.CustomerAddresses.Select(ca => new CustomerAddressResponse
           {
               CustomerId = ca.CustomerId,
               AddressId = ca.AddressId,
@@ -161,8 +161,8 @@ namespace AdventureWorks.BAL.Service
               PostalCode = ca.Address.PostalCode,
               Rowguid = ca.Address.Rowguid,
               ModifiedDate = ca.Address.ModifiedDate
-          }).ToList() : new List<CustomerAddressResponse>(),
-          SalesOrderHeaders = includeSalesOrderHeaders ? data.SalesOrderHeaders.Select(soh => new SalesOrderHeaderResponse
+          }).ToList(),
+          SalesOrderHeaders = data.SalesOrderHeaders.Select(soh => new SalesOrderHeaderResponse
           {
               SalesOrderId = soh.SalesOrderId,
               RevisionNumber = soh.RevisionNumber,
@@ -217,7 +217,7 @@ namespace AdventureWorks.BAL.Service
                   }
               }).AsEnumerable().ToList())
 
-          }).ToList() : new List<SalesOrderHeaderResponse>()
+          }).ToList()
       }
       );
 
